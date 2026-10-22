@@ -1,0 +1,50 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sns-app
+  namespace: sns
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - sns.localhost
+  rules:
+    - backendRefs:
+        - name: sns-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rustfs
+  namespace: rustfs
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - rustfs.localhost
+  rules:
+    - backendRefs:
+        - name: rustfs
+          port: 9000
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rustfs-admin
+  namespace: rustfs
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - rustfs-admin.localhost
+  rules:
+    - backendRefs:
+        - name: rustfs
+          port: 9001
+
+# 외부로부터 트래픽이 들어왔을때 어떤 service 로 라우팅 할지 규칙을 정해주는 명세
+# 외부에서 위의 3개만 접근할 수 있도록 라우팅
