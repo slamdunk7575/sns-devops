@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: postgres
+# 일반적으로 key: value 형태 의미
+type: Opaque
+stringData:
+  db-username: snsuser
+  db-password: snspassword
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: postgres
+spec:
+  # 한번에 한 노드에서만 읽고 쓸 수 있도록 설정
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: postgres
+spec:
+  replicas: 1
+  # selector 는 deployment 정의 -> app: postgres 라는 레이블을 가진 pod 만 이 디플로이먼트에서 관리하겠다는 의미
+  selector:
+    matchLabels:
+      app: postgres
+  # template 는 pod 정의 -> pod 에 app: postgres 이라는 레이블을 달아준것
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18.1-alpine3.22
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: snsdb
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: db-username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: db-password
+          # postgres 가 PV 에 볼륨을 마운트하는 정의
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          # pod 가 요청을 받을 준비가 되었는지 확인
+          # kubelet 이 readinessProbe 통해 pod 상태를 확인 하다가 만약, 실패하면 service 에서 연결을 제외시킴
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "snsuser", "-d", "snsdb"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # pod 가 정상이여서 계속 실행해도 되는지 확인 (기본: 3번)
+          # kubelet 이 livenessProbe 통해 pod 상태를 확인 하다가 만약, 실패하면 해당 pod 재시작 요청
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "snsuser", "-d", "snsdb"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: postgres
+spec:
+  # key 가 app 이고 value 가 postgres 인 레이블을 가진 pod 에 이 서비스를 연결할 것이라는 설정
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
