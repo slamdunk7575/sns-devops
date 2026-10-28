@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sns-app
+  namespace: argocd
+  # 애플리케이션을 삭제하기 전에 수행할 정리 작업 (관리하던 리소스도 함께 삭제하는 설정)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Argo CD 의 기존 프로젝트로 설정
+  project: default
+
+  # 변경을 감지하고 가져올 부분
+  source:
+    repoURL: https://github.com/slamdunk7575/sns-devops.git
+    # 해당 저장소의 기본 브랜치의 최신 커밋을 추적
+    targetRevision: HEAD
+    path: k8s/sns-app
+
+  # 변경을 반영할 쿠버네티스 클러스터
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sns
+
+  # 싱크 정책
+  syncPolicy:
+    automated:
+      enabled: true      # 자동 동기화 사용 여부 (기본값: true)
+      prune: true        # Git에서 삭제된 리소스 → 클러스터에서도 삭제 (기본값: false)
+      selfHeal: true     # 클러스터 수동 변경 → Git 상태로 자동 복구 (기본값: false)
+      allowEmpty: false  # 리소스가 0개인 상태로의 sync 허용 여부 (기본값: false)
+    syncOptions:
+      - CreateNamespace=true  # 위의 배포 대상이 없으면 생성하는 설정 (예: namespace: sns)
