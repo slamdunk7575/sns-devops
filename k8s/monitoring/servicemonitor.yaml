@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sns-app
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - sns
+  selector:
+    # Prometheus가 해당 Service 를 찾을 수 있도록 Service 에 설정된 labels 값을(app: sns-app) 보고 연결
+    matchLabels:
+      app: sns-app
+    # Prometheus가 30 초 간격으로 매트릭을 polling
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
