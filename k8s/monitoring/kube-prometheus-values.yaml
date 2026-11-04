@@ -1,0 +1,53 @@
+prometheus:
+  prometheusSpec:
+    # 직접 만든 서비스 모니터가 helm 설치 이름에 의존하지 않고 연결하는 설정
+    serviceMonitorSelectorNilUsesHelmValues: false
+    # 다른 도구가 보내는 매트릭도 Prometheus 받아서 저장하는 옵션
+    # Prometheus -> app 을 조회해서 매트릭을 수집해오는 상태라서 필요없지만,
+    # Tempo 라는 도구에서 -> Prometheus 한테 직접 매트릭을 전달할때 사용하려고 추가
+    enableRemoteWriteReceiver: true
+    retention: 2d
+    resources:
+      requests:
+        cpu: 100m
+        memory: 300Mi
+      limits:
+        memory: 768Mi
+
+grafana:
+  defaultDashboardsEnabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+nodeExporter:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+defaultRules:
+  rules:
+    nodeExporterAlerting: false
+    nodeExporterRecording: false
+    node: false
+    network: false
+    kubePrometheusNodeRecording: false
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    windows: false

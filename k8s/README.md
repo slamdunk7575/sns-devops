@@ -207,9 +207,12 @@ kubectl delete namespace argocd
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
+# k8s/monitoring/kube-prometheus-values.yaml 파일이 최초에 적용
+# k8s/monitoring/kube-prometheus-values-full.yaml 파일이 덮어쓰여져 둘다 적용됨 (없는 옵션들은 추가)
 helm install prometheus prometheus-community/kube-prometheus-stack --version 88.3.0 \
   -n monitoring --create-namespace \
-  -f k8s/monitoring/kube-prometheus-values.yaml
+  -f k8s/monitoring/kube-prometheus-values.yaml \
+  -f k8s/monitoring/kube-prometheus-values-full.yaml
 
 kubectl apply -f k8s/monitoring/servicemonitor.yaml
 kubectl apply -f k8s/gateway/monitoring.yaml

@@ -1,0 +1,42 @@
+# Operator 명세? ServiceMonitor(어떤 앱을 읽을지 적은 안내서)를 지속적으로 읽어 수집 설정을 Prometheus 에 반영
+prometheus:
+  prometheusSpec:
+    # 메트릭 보관 기간
+    retention: 7d
+    # 필요한 리소스 상한선, 하한선
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+
+# 예: helm install prometheus prometheus-community/kube-prometheus-stack --version 88.3.0 \
+# kube-prometheus-stack 이 prometheus 뿐만 아니라 grafana 까지 같이 제공
+grafana:
+  # 대시보드 활성화
+  defaultDashboardsEnabled: true
+  # 필요한 리소스 상한선, 하한선
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# kind 가 설치한 노드(control-plane, worker 노드들) 지표(CPU, Memory 등) 수집
+nodeExporter:
+  enabled: true
+
+defaultRules:
+  rules:
+    # 노드 디스트 공간 부족, CPU 사용률 과다, 메모리 사용률 과다, 네트워크 송수신 오류 등을 판단해서 경고를 만듦
+    nodeExporterAlerting: true
+    # 예: 최근 5분동안 CPU 사용률, 메모리 사용류, 네트워크 사용량 같이 자주 쓰는 계산값을 주기적으로 수행하고 결과를 새 매트릭으로 저장 (활성화시 메모리 더 사용)
+    nodeExporterRecording: true
+    # pod 와 node 의 연결정보, 노드별 CPU 코어수, 사용률, 메모리 합계 수집
+    node: true
+    # 네트워크 인터페이스가 켜졌다 꺼졌다 하는걸 감지
+    network: true
+    # 노드별 CPU 사용량, 네트워크 송수신량, 클러스터 전체 CPU 사용률 등을 미리 계산해서 저장
+    kubePrometheusNodeRecording: true
