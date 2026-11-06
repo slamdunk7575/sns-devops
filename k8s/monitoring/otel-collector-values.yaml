@@ -1,0 +1,147 @@
+# 데몬셋이란? 배치 가능한 각 노드(현재 2개)에 OpenTelemetry 컬렉터를 하나씩 실행
+# 각 노드에서 실행되는 pod 에 데몬셋이 적용되어 로그를 수집
+mode: daemonset
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+  tag: "0.158.0"
+
+# 헬름 차트가 제공하는 설정 묶음에서 컨테이너 pod 로그 파일을 수집하는 설정
+presets:
+  logsCollection:
+    enabled: true
+    # 컬렉터 자신의 로그도 발생할 수 있는데 제외시키는 설정
+    includeCollectorLogs: false
+    # 파일을 어디까지 읽었는지 체크포인트는 노드 디스크에 저장
+    storeCheckpoints: true
+  # 로그에 쿠버네티스 출처 정보를 붙이는 설정 활성화 (예: pod, namespace, node, image 등 정보 추가됨)
+  # pod 에 붙은 label 값 추출
+  #   template:
+  #    metadata:
+  #      labels:
+  #        app: sns-app
+  # 예: 아래 쿠버네티스 정보들 추가
+  # container_image_name: ghcr.io/slamdunk7575/sns-app
+  # log_file_path: /var/log/pods/sns_sns-app-58f96c84d4-t7jj8_ab900c1d-7810-4a30-b9ec-a9896da5a385/sns-app/3.log (워커 노드의 해당 경로에 로그 쌓임)
+  kubernetesAttributes:
+    enabled: true
+    extractAllPodLabels: true
+    extractAllPodAnnotations: false
+
+# 최소/최대 허용량 리소스 설정
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# 06강은 노드 로그 파일만 읽습니다. 07강에서 OTLP(OpenTelemetry Protocol) 트레이스 수신을 켭니다. (OpenTelemetry 컬렉터 수집기에서 받는 설정)
+ports:
+  otlp:
+    enabled: false
+  otlp-http:
+    enabled: false
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+# OpenTelemetry 컬렉터 내부 config 설정
+config:
+  # 데이터 받아오는 receivers 설정
+  receivers:
+    jaeger: null
+    prometheus: null
+    zipkin: null
+    otlp: null
+    # 차트 0.169.0의 logsCollection 프리셋 키에 맞춥니다. 렌더링 시 file_log로 변환됩니다.
+    filelog:
+      # CRI 로그 봉투를 벗긴 뒤 sns-app의 JSON 본문을 읽습니다.
+
+      # 오퍼레이터가 container 타입에 대해서는 container-parser 라는 아이디를 붙임
+      # 즉, 컨테이너는 pod 같은 컨테이너 런타임의 로그 형식을 해석해서 로그로부터 어떤 본문과 출처를 추출
+      # sns 앱에서 로그를 json 형식으로 만듦
+
+      # json_parser 는 json 형식을 찾고(예: resource["k8s.container.name"] == "sns-app" and body matches "^\\{")
+      # attributes.app 라는 json 의 임시공간을 만들고 여기에 timestamp, 에러 심각도(severity) 등을 가져
+
+      # move 는 데이터를 가공하는것
+      # attributes.app.service_name 으로 들어오는 필드의 경우 resource["service.name"] 으로 바꿔줌
+      # attributes.app 에 있는 속성들을 message 는 body 로 바꿈
+      # stack_trace 는 exception_stacktrace 로 바
+
+      # remove 는 다 옮기고 나서 attributes.app 임시 저장소 삭제
+      operators:
+        - type: container
+          id: container-parser
+        - type: json_parser
+          if: 'resource["k8s.container.name"] == "sns-app" and body matches "^\\{"'
+          parse_to: attributes.app
+          timestamp:
+            parse_from: attributes.app["@timestamp"]
+            layout_type: gotime
+            layout: '2006-01-02T15:04:05.999999999Z07:00'
+          severity:
+            parse_from: attributes.app.level
+        - type: move
+          if: 'attributes.app != nil'
+          from: attributes.app.service_name
+          to: resource["service.name"]
+        - type: trace_parser
+          if: 'attributes.app != nil and attributes.app.traceId != nil and attributes.app.spanId != nil'
+          trace_id:
+            parse_from: attributes.app.traceId
+          span_id:
+            parse_from: attributes.app.spanId
+        - type: move
+          if: 'attributes.app != nil'
+          from: attributes.app.message
+          to: body
+        - type: move
+          if: 'attributes.app != nil and attributes.app.stack_trace != nil'
+          from: attributes.app.stack_trace
+          to: attributes.exception_stacktrace
+        - type: move
+          if: 'attributes.app != nil'
+          from: attributes.app.logger_name
+          to: attributes.logger_name
+        - type: remove
+          if: 'attributes.app != nil'
+          field: attributes.app
+  # exporters 는 어디로 전달할지 설정
+  # OpenTelemetry Protocol 규칙으로 http Protocol 로 loki 로 보냄
+  exporters:
+    debug: null
+    otlphttp/loki:
+      endpoint: http://loki.monitoring.svc.cluster.local:3100/otlp
+
+  # OpenTelemetry Collector 파이프라인은 수신 -> 가공 -> 전송 순으로 동작함
+  # 수신: 노드 로그 파일, JSON 로그 해석
+  # 가공: 출처 정보 추가, 메모리 보호와 묶음 처리
+  # 전송: Loki 로 전달, 중앙 저장소에 보관
+  # receivers(수신), processors(가공), exporters(전송)
+  # processors 에서 OpenTelemetry 컬렉터를 설치할때 미리 제공해주는 특성으로 가공을 적용
+  # - memory_limiter: 메모리가 부족할때 잠시 요청을 덜 받도록 하는 설정
+  # - k8s_attributes: 쿠버네티스 특징을 추가
+  # - batch: 전송할때 효율적으로 여러개를 묶어서 전송하는 배치 옵션
+  # OpenTelemetry 컬렉터도 metrics, traces 를 전달할 수 있음
+  # 여기서는 metrics 은 prometheus 를 사용 -> prometheus 는 OpenTelemetry 컬렉터 같은 수집기가 자체 내장되어 있음
+
+  # metrics 에서는 Service Monitor 를 등록하고 그 설정을 Operator 가 읽어 Prometheus 에 등록되도록 했음
+  # 그래서 Prometheus 직접 sns 앱을 조회하면서 메트릭을 수집)
+  # logs 는 loki 가 직접 sns 앱을 조회하는게 아니라
+  # 중간에 OpenTelemetry 컬렉터를 거쳐서 로그 데이터를 수신, 가공해서 loki 로 전달함
+  service:
+    pipelines:
+      logs:
+        receivers: [filelog]
+        processors: [memory_limiter, k8s_attributes, batch]
+        exporters: [otlphttp/loki]
+      metrics: null
+      traces: null

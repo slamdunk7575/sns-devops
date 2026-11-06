@@ -209,6 +209,15 @@ helm repo update
 
 # k8s/monitoring/kube-prometheus-values.yaml 파일이 최초에 적용
 # k8s/monitoring/kube-prometheus-values-full.yaml 파일이 덮어쓰여져 둘다 적용됨 (없는 옵션들은 추가)
+# kube-prometheus-stack 차트는 prometheus 단독이 아니라 모니터링 스택 전체를 묶은 차트
+# 기본으로 설치되는 구성요소
+# - Prometheus Operator
+# - Prometheus (서버)
+# - Alertmanager
+# - Grafana (기본 대시보드와 Prometheus 데이터 소스가 미리 설정됨)
+# - node-exporter (노드 메트릭 수집)
+# - kube-state-metrics (쿠버네티스 오브젝트 상태 수집)
+# - 각종 ServiceMonitor, PrometheusRule, 기본 대시보드
 helm install prometheus prometheus-community/kube-prometheus-stack --version 88.3.0 \
   -n monitoring --create-namespace \
   -f k8s/monitoring/kube-prometheus-values.yaml \
@@ -237,6 +246,7 @@ kubectl get httproute -n monitoring
 05강의 Grafana를 그대로 사용하고 Loki 데이터소스를 추가합니다.
 
 ```bash
+# grafana 헬름
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo update

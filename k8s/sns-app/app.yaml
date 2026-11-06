@@ -66,12 +66,14 @@ spec:
                 secretKeyRef:
                   name: sns-secret
                   key: rustfs-secret-key
-            - name: NODE_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: http://$(NODE_IP):4318
+# OpenTelemetry exporter 로 sns 앱에서 -> OpenTelemetry 로 로그를 전송하는 PUSH 방식이 아니라
+# OpenTelemetry Collector 가 로그를 직접 조회해오는 PULL 방식으로 변경하기 위해 설정 제거
+#            - name: NODE_IP
+#              valueFrom:
+#                fieldRef:
+#                  fieldPath: status.hostIP
+#            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#              value: http://$(NODE_IP):4318
             - name: JAVA_TOOL_OPTIONS
               # JVM 이 사용할 힙 메모리를 pod 안의 컨테이너 메모리의 최대 50% 까지 사용한다는 설정
               # 애플리케이션 때문에 pod 포함한 전체 클러스터가 영향을 받는 것을 최소화
