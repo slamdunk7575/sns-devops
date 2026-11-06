@@ -1,0 +1,18 @@
+# loki 는 monitoring 네임스페이스에 넣고
+# traefik 게이트웨이에 맵핑을 하면 호스트네임 loki.localhost 주소로
+# 쿠버네티스가 만들어 주는 loki 서비스 리소스의 포트 3100 으로 연결되도록 HTTP Route 설정
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - loki.localhost
+  rules:
+    - backendRefs:
+        - name: loki
+          port: 3100

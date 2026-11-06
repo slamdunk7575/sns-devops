@@ -1,0 +1,72 @@
+# SingleBinary 란? 로그의 저장과 조회 기능을 하나의 loki 프로세스(pod 하나)에서 실행
+# 보통 대규모 운영을 할때는 Distributed Mode 로 설정
+deploymentMode: SingleBinary
+
+loki:
+  # tenant 기능을 끔
+  # tenant 란? 다른 리소스가 접근하는 것을 차단하는 정책
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  # storage 를 filesystem 으로 설정하면 워커노드에 바로 적재
+  # 보통 외부 저장소(예: AWS S3)를 연결해서 저장
+  storage:
+    type: filesystem
+  # 임의의 날짜 기준으로 인덱스를 tsdb 방식(타임시리즈 데이터베이스)으로 저장
+  # 로그 조회시 시간순으로 조회하면 효과적이기 때문에 날짜 기준으로 인덱스를 설정
+  # 인덱스를 예: 24시간 단위로 나눔
+  schemaConfig:
+    configs:
+      - from: "2025-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    # 로그레벨, Trace ID 같은 부가 필드를 함께 저장하는 설정
+    allow_structured_metadata: true
+  # 비슷한 로그를 패턴으로 묶는 기능
+  # 아래 예시의 공통 부분을 패턴으로 묶을 수 있음 (예: 게시글 조회 실패 postId:<_>)
+  # 예:
+  # 게시글 조회 실패 postId:101
+  # 게시글 조회 실패 postId:202
+  # 게시글 조회 실패 postId:303
+  pattern_ingester:
+    enabled: true
+
+singleBinary:
+  replicas: 1
+  persistence:
+    size: 3Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 448Mi
+
+# 조회, 쓰기 기능 or 로그 수신 기능만 따로 실행하는 목표 설정도 할 수 있음
+# backend 는 저장소 관리 기능 같은 내부 배포 설정을 따로 할 수 있음
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# minio 는 AWS S3 호환 저장소 설정 (filesystem 사용하므로 비활성화)
+minio:
+  enabled: false
+# traefik 게이트웨이 사용하므로 비활성화
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
