@@ -66,14 +66,18 @@ spec:
                 secretKeyRef:
                   name: sns-secret
                   key: rustfs-secret-key
-# OpenTelemetry exporter 로 sns 앱에서 -> OpenTelemetry 로 로그를 전송하는 PUSH 방식이 아니라
-# OpenTelemetry Collector 가 로그를 직접 조회해오는 PULL 방식으로 변경하기 위해 설정 제거
-#            - name: NODE_IP
-#              valueFrom:
-#                fieldRef:
-#                  fieldPath: status.hostIP
-#            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-#              value: http://$(NODE_IP):4318
+            # 내부 클러스터 주소 IP 설정
+            # sns-app 에서 요청을 보내면 해단 클러스터 IP 를 통해 sns-recommend Service 로 가게됨
+            - name: RECOMMEND_BASE_URL
+              value: http://sns-recommend.sns.svc.cluster.local:8080
+            # sns-app 에서 Open Telemetry 컬렉터에 트레이스 전송을 하기 위해 Pod 가 실행되는 Node IP(status.hostIP 로 알 수 있음)를 환경변수로 설정
+            # 즉, sns-app Pod 가 띄워져 있는 node 의 Open Telemetry 컬렉터 주소를 설정해서 트레이스를 보냄
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(NODE_IP):4318
             - name: JAVA_TOOL_OPTIONS
               # JVM 이 사용할 힙 메모리를 pod 안의 컨테이너 메모리의 최대 50% 까지 사용한다는 설정
               # 애플리케이션 때문에 pod 포함한 전체 클러스터가 영향을 받는 것을 최소화

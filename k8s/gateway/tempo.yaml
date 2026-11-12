@@ -1,0 +1,18 @@
+# 쿠버네티스가 제공하는 게이트웨이 API 인터페이스에 HTTPRoute 리소스를 추가하는 설정
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tempo
+  namespace: monitoring
+# traefik-gateway 라는 게이트웨이 구현체를 traefik 네임스페이스에 등록
+# rule 은 tempo 라는 쿠버네티스 서비스 리소스에 포트 3200 번으로 연결
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - tempo.localhost
+  rules:
+    - backendRefs:
+        - name: tempo
+          port: 3200

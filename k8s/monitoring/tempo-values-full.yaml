@@ -1,0 +1,47 @@
+tempo:
+  memBallastSizeMbs: 256
+  retention: 24h
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # 템포가 요청받은 트레이스 정보로 메트릭 지표를 유출하는 PromQL 을 자동으로 만드는 설정 (Prometheus 에서 PromQL 로 조회 가능)
+  # 템포가 PromQL 로 조사한 지표값들을 템포에 저장하지는 않고 Prometheus 에 저장
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: "http://prometheus-kube-prometheus-prometheus.monitoring:9090/api/v1/write"
+    processor:
+      # service_graphs 설정은 호출 관계의 짝궁들이 도착하기를 최대 10초 기다리는 설정
+      # 예:
+      # 1. sns-app -> sns-recommend 로 요청
+      # 2. sns-recommend 는 OpenTelemetry 컬렉터로 자신의 트레이스 정보를 전달
+      # 3. OpenTelemetry 컬렉터는 Tempo 로 전송
+      # 4. sns-app 도 작업이 끝나고 OpenTelemetry 컬렉터로 자신의 트레이스 정보를 전달
+      # 5. 여기서 sns-recommend 와 sns-app 은 같은 트레이스 ID 로 묶여있기 때문에 Tempo 가 예: 10초 기다려줄 수 있음
+      # 6. 같은 트레이스 ID 로 짝궁으로 묶인 sns-recommend 와 sns-app 트레이스 정보까지 들어오면 해당하는 메트릭 정보를 조회할 수 있음
+      # max_items 설정은 메모리에 저장할 최대 호출 관계수
+      service_graphs:
+        wait: 10s
+        max_items: 10000
+      # 추가 정보를(예: 서비스 이름) 메트릭 라벨에 포함시킬지 설정 (Prometheus 해당 라벨을 가지고 해당 지표가 어디서 온건지 확인)
+      span_metrics:
+        enable_target_info: true
+  overrides:
+    defaults:
+      # Tempo 가 제공하는 metrics_generator 의 processors 옵션들을 가져와서 쓰는 설정
+      # service-graphs: 서비스간 호출 관계 메트릭 생성
+      # span-metrics: span 의 개수와 지연시간 등에 대한 메트릭 생성
+      # local-blocks: Tempo 는 디스크에 저장하기 전에 임시 블록에 저장했다가 모아서 디스크에 저장함
+      # local-blocks 는 임시 블록에 트레이스 정보가 있어도 해당 트레이스들을 조회할 수 있게 해주는 설정
+      # 메트릭의 PromQL, 로그의 LogQL, 템포의 TraceQL 을 사용해서 메트릭을 계산할 수 있도록 도와주는 프로세서
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+          - local-blocks
+
+persistence:
+  size: 5Gi

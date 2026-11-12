@@ -1,0 +1,32 @@
+tempo:
+  repository: grafana/tempo
+  tag: "2.10.8"
+  # tempo 는 GO 애플리케이션으로 만들어짐 -> GO 애플리케이션도 가비지 컬렉션(GC)을 안정적으로 수행하기 위해 미리 잡아놓는 메모리 크기
+  memBallastSizeMbs: 64
+  # 트레이스 정보 보관 설정 (6시간)
+  retention: 6h
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+  metricsGenerator:
+    enabled: false
+  receivers:
+    opencensus: null
+    # Tempo 도 OTLP 프로토콜로 트레이스 정보를 받음 (프로젝트에서는 grpc 로 받음)
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+# 쿠버네티스 기본 deploy 옵션은 롤링 업데이트라서 새로운 pod 가 켜지고 완성되면 기존 파드가 삭제됨
+# (기존 pod 에 연결된 노드의 디스크가 empty 옵션이라 pod 가 삭제되면 기존 데이터도 날라감)
+# Tempo 파트가 바껴도 트레이스 정보를 유지할 수 있도록 설정
+persistence:
+  enabled: true
+  size: 2Gi
