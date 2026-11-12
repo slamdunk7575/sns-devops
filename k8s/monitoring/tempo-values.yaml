@@ -11,11 +11,10 @@ tempo:
       memory: 192Mi
     limits:
       cpu: 500m
-      memory: 384Mi
+      memory: 512Mi
   metricsGenerator:
     enabled: false
   receivers:
-    opencensus: null
     # Tempo 도 OTLP 프로토콜로 트레이스 정보를 받음 (프로젝트에서는 grpc 로 받음)
     otlp:
       protocols:

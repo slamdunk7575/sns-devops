@@ -7,7 +7,7 @@ tempo:
       memory: 256Mi
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 768Mi
   # 템포가 요청받은 트레이스 정보로 메트릭 지표를 유출하는 PromQL 을 자동으로 만드는 설정 (Prometheus 에서 PromQL 로 조회 가능)
   # 템포가 PromQL 로 조사한 지표값들을 템포에 저장하지는 않고 Prometheus 에 저장
   metricsGenerator:
