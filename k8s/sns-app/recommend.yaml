@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sns-recommend
+  namespace: sns
+spec:
+  replicas: 1
+  # Deployment 라벨 설정
+  selector:
+    matchLabels:
+      app: sns-recommend
+  # Pod 라벨 설정 (라벨이 동일하니깐 Deployment 가 Pod 를 관리할 수 있음)
+  template:
+    metadata:
+      labels:
+        app: sns-recommend
+    spec:
+      # Pod 안에 만들 컨테이너 설정
+      containers:
+        - name: sns-recommend
+          image: sns-recommend:latest
+          imagePullPolicy: IfNotPresent
+          # sns-app 과 동일하게 8080 포트를 사용하지만 각각 Pod 는 다른 IP를 가지고 있어 겹치지 않음
+          ports:
+            - containerPort: 8080
+          # sns-recommend Pod 가 올라가 Node 의 IP 를 환경변수로 설정
+          # go 애플리케이션(sns-recommend)도 해당 Node 에 띄워져 있는 OpenTelemetry 컬렉터로 trace 를 보내기 위함
+          # FAST_MS, SLOW_MS 를 사용해서 빠른응답, 지연응답을 줌 (JITTER_MS 는 응답을 너무 고정적으로 주지 않기 위해서 사용)
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(NODE_IP):4318
+            - name: FAST_MS
+              value: "40"
+            - name: SLOW_MS
+              value: "260"
+            - name: JITTER_MS
+              value: "60"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          # sns-app 에서는 JIB 로 도커 이미지를 생성시 보안을 위해 root 계정이 아니라 유저 1000번 계정으로 만들로록 설정
+          # sns-recommend 는 Dockerfile 로 이미지를 생성하는데 nonroot 계정을 사용
+          # 임의로 사용자 계정 생성 (예: 65532)
+          # allowPrivilegeEscalation: 실행중 권한 상승을 못하도록 막음
+          # readOnlyRootFilesystem: 컨테이너 루트 파일 시스템의 write 를 방지
+          # drop: - ALL: 추가적으로 리눅스 권한 제거
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sns-recommend
+  namespace: sns
+  labels:
+    app: sns-recommend
+spec:
+  type: ClusterIP
+  # 외부 요청을 app: sns-recommend 레이블이 붙은 Pod 에 전달하도록 설정
+  # HTTP 8080 으로 들어온 요청을 컨테이너의 8080 포트로 연결
+  selector:
+    app: sns-recommend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

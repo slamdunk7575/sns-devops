@@ -265,7 +265,9 @@ kubectl apply -f k8s/gateway/loki.yaml
 먼저 Go 추천 서비스를 로컬에서 빌드하고 Kind에 배포합니다. 별도 이미지 레지스트리는 필요 없어요.
 
 ```bash
+# 도커 image 생성
 docker build -t sns-recommend:latest apps/recommend
+# kind 클러스터에(예: sns-cluster) 도커 image 로드
 kind load docker-image sns-recommend:latest --name sns-cluster
 kubectl apply -f k8s/sns-app/app.yaml
 kubectl apply -f k8s/sns-app/recommend.yaml

@@ -38,11 +38,13 @@ resources:
     memory: 512Mi
 
 # 06강은 노드 로그 파일만 읽습니다. 07강에서 OTLP(OpenTelemetry Protocol) 트레이스 수신을 켭니다. (OpenTelemetry 컬렉터 수집기에서 받는 설정)
+# 로그는 노드 파일에서 읽고, 트레이스는 OTLP로 받습니다.
+# sns-app, sns-recommend 애플리케이션에서 모두 OTLP 규격으로 트레이스를 전송받기 위해 otlp, otlp-http 활성화
 ports:
   otlp:
-    enabled: false
+    enabled: true
   otlp-http:
-    enabled: false
+    enabled: true
   jaeger-compact:
     enabled: false
   jaeger-thrift:
@@ -59,7 +61,14 @@ config:
     jaeger: null
     prometheus: null
     zipkin: null
-    otlp: null
+    # grpc 엔드포인트는 4317, http 엔드포인트는 4318 포트로 둘다 열어놓음
+    # 애플리케이션들에서는 모두 http 4318 엔드포인트로 전달받음
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
     # 차트 0.169.0의 logsCollection 프리셋 키에 맞춥니다. 렌더링 시 file_log로 변환됩니다.
     filelog:
       # CRI 로그 봉투를 벗긴 뒤 sns-app의 JSON 본문을 읽습니다.
@@ -121,6 +130,14 @@ config:
     otlphttp/loki:
       endpoint: http://loki.monitoring.svc.cluster.local:3100/otlp
 
+    # OpenTelemetry 에서 tempo 로 연결은 grpc 사용
+    # 현재 otel-collector-values 의 exporters 옵션이 기본적으로 호스트랑 포트만 맵핑하면 grpc 연결
+    # tls 옵션 사용안함
+    otlp/tempo:
+      endpoint: tempo.monitoring.svc.cluster.local:4317
+      tls:
+        insecure: true
+
   # OpenTelemetry Collector 파이프라인은 수신 -> 가공 -> 전송 순으로 동작함
   # 수신: 노드 로그 파일, JSON 로그 해석
   # 가공: 출처 정보 추가, 메모리 보호와 묶음 처리
@@ -144,4 +161,9 @@ config:
         processors: [memory_limiter, k8s_attributes, batch]
         exporters: [otlphttp/loki]
       metrics: null
-      traces: null
+      traces:
+        # 위의 receivers 에 정의한 otlp 사용
+        # 각 앱에서 OpenTelemetry SDK 를 사용했기 때문에 트레이스 정보가 규격에 맞게 들어와서 log 처럼 별도 처리를 추가하지 않고 프로토콜만 정의
+        receivers: [ otlp ]
+        processors: [ memory_limiter, k8s_attributes, batch ]
+        exporters: [ otlp/tempo ]
