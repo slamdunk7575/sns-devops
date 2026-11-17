@@ -1,0 +1,93 @@
+# Prometheus 경보 설정에 대한 규칙 정의
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sns-app-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  # 규칙 그룹 목록 정의
+  # http_server_requests_seconds_count 값으로 네임스페이스 sns, 서비스 sns-app 의 /actuator.* URI 로 들어온 요청 건수를 누적해서 구하고
+  # rate() 로 2분 동안의 증가 건수를 초당 평균을 계산 (예: 초당 10건, 초당 20건)
+  # sum() 은 모든 pod 의 요청을 다 합하는것
+  # 위에서 계산한 초당 요청 건수값이 30초 동안 5건 이상 발생하면 warning 수준의 알림을 slack 으로 전달
+  groups:
+    - name: sns-app
+      rules:
+        - alert: SnsAppHighRequestRate
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="sns", service="sns-app", uri!~"/actuator.*"}[2m])) > 5
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "sns-app 초당 요청량 5건 초과"
+            description: "현재 초당 요청량: {{ $value | humanize }}건"
+
+        # 오류 요청량을 전체 요청량으로 나눠서 오류 비율 계산
+        # 예:
+        # http_server_requests_seconds_count 값으로 네임스페이스 sns, 서비스 sns-app 의 /actuator.* URI 로 들어온 500 에러 요청 건수를 누적해서 구하고
+        # rate() 로 2분 동안의 증가 건수를 초당 평균을 계산 (예: 초당 10건, 초당 20건)
+        # sum() 은 모든 pod 의 요청을 다 합하는것
+        # (sum(rate(http_server_requests_seconds_count{namespace="sns", service="sns-app", uri!~"/actuator.*"}[2m])) > 0) 규칙은 status=~"5.." 조건만 없으므로 전체 요청 건수를 의미함
+        # > 0 이 수식을 넣어서 전체 요청량이 0 일때는 계산을 하지 않음
+        #  > 0.1 위에서 계산한 오류 비율이 10% 를 넘는지 확인
+        # 이 조건이 30초 이상 발생하면 warning 수준의 알림을 slack 으로 전달
+        # description: "현재 에러율: {{ $value | humanizePercentage }}" 위에서 계산한 소수점 값을 사람이 보기 쉽게 알림 메시지에 퍼센트 값으로 출력
+        - alert: SnsAppHighErrorRate
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{namespace="sns", service="sns-app", uri!~"/actuator.*", status=~"5.."}[2m]))
+              /
+              (sum(rate(http_server_requests_seconds_count{namespace="sns", service="sns-app", uri!~"/actuator.*"}[2m])) > 0)
+            ) > 0.1
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "sns-app 5xx 에러율 10% 초과"
+            description: "현재 에러율: {{ $value | humanizePercentage }}"
+
+        # histogram_quantile(0.95 는 응답시간 히스토그램으로 p95 계산
+        # http_server_requests_seconds_bucket 은
+        # 예:
+        # 1초 미만으로 들어온 요청들의 집합이 있다고 했을때, 구간별로 요청 누적 건수를 구하는 것
+        # (le) 는 '보다 작은)' 이라는 뜻으로 각 pod의 구간끼리 SUM 을 계산
+        # histogram_quantile 이 위 계산된 값들을 일렬로 쭉 세워서 100개중에 95번째의 값을 확인
+        # 만약 > 1 보다 크다면 문제가 있다고 판단하고 30초 이상 유지될때, warning 수준으로 알림을 보냄
+
+        # Pod A
+        # 0.1 - 10 (이내로 응답이 온 요청건수 10건)
+        # 0.2 - 2
+        # 0.3 - 2
+        # ...
+        # 0.9 - 1
+        # 1.0 - 0
+
+        - alert: SnsAppHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_server_requests_seconds_bucket{namespace="sns", service="sns-app", uri!~"/actuator.*"}[2m])) by (le)
+            ) > 1
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "sns-app p95 응답시간 1초 초과"
+            description: "현재 p95: {{ $value | humanizeDuration }}"
+
+        # up{job="sns-app"} == 0 조건은 sns-app 앱은 정상으로 띄워져 있지만 수집이 없는 경우
+        # 또는 absent(up{job="sns-app"}) == 1 sns-app 앱이 정상인 상태가 없는 경우
+        # 이런 조건이 30초 이상 유지가 되면 critical 수준으로 알림을 보냄
+        - alert: SnsAppDown
+          expr: |
+            up{job="sns-app"} == 0
+            or
+            absent(up{job="sns-app"}) == 1
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "sns-app 다운"
+            description: "Prometheus가 sns-app을 scrape할 수 없음"
